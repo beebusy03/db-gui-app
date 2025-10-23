@@ -1,20 +1,27 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import React, { useEffect } from "react";
+import ReactDOM from "react-dom/client";
+import ProductDashboard from "./components/ProductDashboard";
 
-const queryClient = new QueryClient();
+// Redirect component for handling 404s
+const RedirectHandler = () => {
+  const location = useLocation();
+  
+  useEffect(() => {
+    // If we get here, it means no route matched
+    console.log('No route found for:', location.pathname);
+  }, [location]);
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-  </QueryClientProvider>
+  return <ProductDashboard />;
+};
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <BrowserRouter basename="/db-gui-app">
+      <Routes>
+        <Route path="/" element={<ProductDashboard />} />
+        <Route path="*" element={<RedirectHandler />} />
+      </Routes>
+    </BrowserRouter>
+  </React.StrictMode>
 );
-
-export default App;

@@ -4,7 +4,6 @@ import {
   useRef,
   Fragment,
   useCallback,
-  useMemo,
 } from "react";
 import {
   Search,
@@ -17,6 +16,7 @@ import {
   ShoppingCart,
   Warehouse,
   Box,
+  Smartphone,
 } from "lucide-react";
 
 import "./ProductDashboard.css";
@@ -130,21 +130,21 @@ export default function ProductDashboard() {
   const [products, setProducts] = useState<any[]>([]);
   const [expandedRows, setExpandedRows] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [isSearching, setIsSearching] = useState<boolean>(false);
-
-  // Simulate loading state for professional UX
-  useEffect(() => {
-    if (searchQuery) {
-      setIsSearching(true);
-      const timer = setTimeout(() => setIsSearching(false), 300);
-      return () => clearTimeout(timer);
-    } else {
-      setIsSearching(false);
-    }
-  }, [searchQuery]);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
 
   const searchDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSearchRef = useRef("");
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!selectedManufacturer) return;
@@ -185,6 +185,7 @@ export default function ProductDashboard() {
 
   useEffect(() => {
     setCurrentPage(1);
+    setExpandedRows([]);
   }, [selectedManufacturer]);
 
   useEffect(() => {
@@ -192,6 +193,7 @@ export default function ProductDashboard() {
 
     if (isNewSearch) {
       setCurrentPage(1);
+      setExpandedRows([]);
       lastSearchRef.current = searchQuery;
     }
   }, [searchQuery]);
@@ -231,17 +233,14 @@ export default function ProductDashboard() {
   const formatCellValue = (value: any, key: string) => {
     if (value === null || value === undefined) return "-";
     
-    // Format currency values
     if (['msrp', 'price', 'amount', 'retail_price', 'your_price'].includes(key) && value) {
       return `$${parseFloat(value).toFixed(2)}`;
     }
     
-    // Format numeric quantities
     if (['quantity', 'received_qty', 'pending_qty', 'total_qty', 'weight_per_unit', 'cube_per_unit', 'fulfilled_cube'].includes(key) && value) {
       return parseFloat(value).toLocaleString();
     }
     
-    // Format dates
     if (key.includes('date') || key.includes('updated') || key === 'received_at') {
       return new Date(value).toLocaleDateString();
     }
@@ -249,8 +248,69 @@ export default function ProductDashboard() {
     return value;
   };
 
+  // Mobile Card View Component
+  const ProductCard = ({ product, index }: { product: any; index: number }) => {
+    const isExpanded = expandedRows.includes(index);
+    const columns = manufacturerColumns[selectedManufacturer];
+    
+    const keyColumns = columns.slice(0, 3);
+    const detailColumns = columns.slice(3);
+    
+    return (
+      <div className="mobile-product-card">
+        <div className="mobile-card-header">
+          <div className="mobile-card-main-info">
+            {keyColumns.map((col) => (
+              <div key={col.key} className="mobile-card-field">
+                <span className="mobile-field-label">{col.label}:</span>
+                <span className="mobile-field-value">
+                  {formatCellValue(product[col.key], col.key)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <button 
+            onClick={() => toggleRow(index)}
+            className="mobile-expand-button"
+            aria-label={isExpanded ? "Collapse details" : "Expand details"}
+          >
+            {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+        </div>
+        
+        {isExpanded && (
+          <div className="mobile-card-details">
+            {detailColumns.map((col) => (
+              <div key={col.key} className="mobile-card-field">
+                <span className="mobile-field-label">{col.label}:</span>
+                <span className="mobile-field-value">
+                  {formatCellValue(product[col.key], col.key)}
+                </span>
+              </div>
+            ))}
+            <div className="mobile-json-section">
+              <details>
+                <summary className="mobile-json-summary">View Raw JSON Data</summary>
+                <pre className="mobile-json-content">
+                  {JSON.stringify(product, null, 2)}
+                </pre>
+              </details>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="dashboard-container">
+    <div className={`dashboard-container ${isMobile ? 'mobile' : 'desktop'}`} style={{
+        margin: 0,
+        padding: isMobile ? '1rem' : '2rem',
+        width: '100%',
+        position: 'relative',
+        left: 0,
+        top: 0
+      }}>
       <div className="dashboard-header-container">
         <div className="sparkle-wrapper">
           <Sparkles className="sparkle sparkle-1" />
@@ -265,6 +325,12 @@ export default function ProductDashboard() {
           </div>
           <div className="header-content">
             <h1 className="header-title">Database Product Dashboard</h1>
+            {isMobile && (
+              <div className="mobile-badge">
+                <Smartphone size={14} />
+                Mobile View
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -278,7 +344,7 @@ export default function ProductDashboard() {
               Filters
             </div>
           </div>
-          <div className="card-content">
+          <div className={`card-content ${isMobile ? 'mobile-filters' : ''}`}>
             <div className="filter-item">
               <label>Manufacturer</label>
               <select
@@ -310,7 +376,7 @@ export default function ProductDashboard() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table or Cards */}
       {selectedManufacturer && (
         <div className="gradient-border-wrapper">
           <div className="card-inner glass-effect">
@@ -318,6 +384,7 @@ export default function ProductDashboard() {
               <div className="card-title-container">
                 {getManufacturerIcon(selectedManufacturer)}
                 {getCardTitle(selectedManufacturer)}
+                <span className="product-count">({totalCount} products)</span>
               </div>
             </div>
             <div className="card-content">
@@ -328,7 +395,8 @@ export default function ProductDashboard() {
                 </div>
               ) : products.length === 0 ? (
                 <div className="empty-state">No products found.</div>
-              ) : (
+              ) : !isMobile ? (
+                // Desktop Table View
                 <>
                   <div className="table-container">
                     <table className="data-table">
@@ -403,6 +471,44 @@ export default function ProductDashboard() {
                       className="pagination-button"
                     >
                       Next
+                    </button>
+                  </div>
+                </>
+              ) : (
+                // Mobile Card View
+                <>
+                  <div className="mobile-products-container">
+                    {products.map((product, index) => (
+                      <ProductCard 
+                        key={index} 
+                        product={product} 
+                        index={index} 
+                      />
+                    ))}
+                  </div>
+
+                  {/* Mobile Pagination */}
+                  <div className="pagination-container mobile-pagination">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="pagination-button"
+                    >
+                      ← Prev
+                    </button>
+                    <span className="pagination-info">
+                      {currentPage} / {Math.ceil(totalCount / PAGE_SIZE)}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) =>
+                          p < Math.ceil(totalCount / PAGE_SIZE) ? p + 1 : p
+                        )
+                      }
+                      disabled={currentPage >= Math.ceil(totalCount / PAGE_SIZE)}
+                      className="pagination-button"
+                    >
+                      Next →
                     </button>
                   </div>
                 </>
