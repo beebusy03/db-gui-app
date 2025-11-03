@@ -1,4 +1,4 @@
-import {
+	import {
   useState,
   useEffect,
   useRef,
@@ -131,6 +131,7 @@ export default function ProductDashboard() {
   const [expandedRows, setExpandedRows] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const searchDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSearchRef = useRef("");
@@ -150,11 +151,18 @@ export default function ProductDashboard() {
     if (!selectedManufacturer) return;
 
     setLoading(true);
+    setError(null);
+    
     try {
       const table = tableMap[selectedManufacturer];
       const url = `https://k6yilzfl19.execute-api.us-east-1.amazonaws.com/products?table=${table}&page=${currentPage}&limit=${PAGE_SIZE}&search=${encodeURIComponent(searchQuery)}`;
 
       const res = await fetch(url);
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      
       const json = await res.json();
 
       const data = json?.data?.[table]?.data || [];
@@ -164,6 +172,7 @@ export default function ProductDashboard() {
       setTotalCount(count);
     } catch (err) {
       console.error("Fetch error:", err);
+      setError("Failed to load products. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -186,6 +195,7 @@ export default function ProductDashboard() {
   useEffect(() => {
     setCurrentPage(1);
     setExpandedRows([]);
+    setProducts([]);
   }, [selectedManufacturer]);
 
   useEffect(() => {
@@ -231,21 +241,80 @@ export default function ProductDashboard() {
   };
 
   const formatCellValue = (value: any, key: string) => {
+    // Handle null, undefined, and empty strings first
     if (value === null || value === undefined) return "-";
+    if (value === '') return "-";
     
-    if (['msrp', 'price', 'amount', 'retail_price', 'your_price'].includes(key) && value) {
-      return `$${parseFloat(value).toFixed(2)}`;
+    // Price/currency fields - FIXED LOGIC
+    if (['msrp', 'price', 'amount', 'retail_price', 'your_price'].includes(key)) {
+      // Convert to string first
+      const valueStr = String(value).trim();
+      
+      // If it's already a formatted price string with $ (like "$1,616.00"), return as-is
+      if (valueStr.startsWith('$')) {
+        return valueStr;
+      }
+      
+      // If it's a number or numeric string without $, try to format it
+      // Remove commas if present
+      const cleanValue = valueStr.replace(/,/g, '');
+      const numValue = parseFloat(cleanValue);
+      
+      // Only format if we got a valid number
+      if (!isNaN(numValue) && isFinite(numValue)) {
+        return `$${numValue.toFixed(2)}`;
+      }
+      
+      // If all else fails, return the original value
+      return valueStr || '-';
     }
     
-    if (['quantity', 'received_qty', 'pending_qty', 'total_qty', 'weight_per_unit', 'cube_per_unit', 'fulfilled_cube'].includes(key) && value) {
-      return parseFloat(value).toLocaleString();
+    // Quantity/numeric fields
+    if (['quantity', 'inventory_qtyvalue', 'received_qty', 'pending_qty', 'total_qty', 'weight_per_unit', 'cube_per_unit', 'fulfilled_cube'].includes(key)) {
+      const valueStr = String(value).trim();
+      
+      // Remove commas and try to parse
+      const cleanValue = valueStr.replace(/,/g, '');
+      const numValue = parseFloat(cleanValue);
+      
+      if (!isNaN(numValue) && isFinite(numValue)) {
+        // For integer quantities, don't show decimals
+        if (['quantity', 'inventory_qtyvalue', 'received_qty', 'pending_qty', 'total_qty'].includes(key)) {
+          return Math.round(numValue).toLocaleString();
+        }
+        // For weights and measurements, keep decimals
+        return numValue.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      }
+      
+      // Return original if not a number
+      return valueStr || '-';
     }
     
+    // Date fields
     if (key.includes('date') || key.includes('updated') || key === 'received_at') {
-      return new Date(value).toLocaleDateString();
+      const valueStr = String(value).trim();
+      if (!valueStr || valueStr === '-') return '-';
+      
+      try {
+        const date = new Date(valueStr);
+        // Check if the date is valid
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          });
+        }
+        // If date is invalid, return original
+        return valueStr;
+      } catch (e) {
+        // If error, return original
+        return valueStr;
+      }
     }
     
-    return value;
+    // For all other fields, return as string
+    return String(value);
   };
 
   // Mobile Card View Component
@@ -303,14 +372,7 @@ export default function ProductDashboard() {
   };
 
   return (
-    <div className={`dashboard-container ${isMobile ? 'mobile' : 'desktop'}`} style={{
-        margin: 0,
-        padding: isMobile ? '1rem' : '2rem',
-        width: '100%',
-        position: 'relative',
-        left: 0,
-        top: 0
-      }}>
+    <div className={`dashboard-container ${isMobile ? 'mobile' : 'desktop'}`}>
       <div className="dashboard-header-container">
         <div className="sparkle-wrapper">
           <Sparkles className="sparkle sparkle-1" />
@@ -376,8 +438,28 @@ export default function ProductDashboard() {
         </div>
       </div>
 
+      {/* Error Message */}
+      {error && (
+        <div className="gradient-border-wrapper">
+          <div className="card-inner glass-effect error-card">
+            <div className="error-message">
+              {error}
+              <button 
+                onClick={() => { 
+                  setError(null); 
+                  fetchData(); 
+                }}
+                className="retry-button"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Table or Cards */}
-      {selectedManufacturer && (
+      {selectedManufacturer && !error && (
         <div className="gradient-border-wrapper">
           <div className="card-inner glass-effect">
             <div className="card-header">
