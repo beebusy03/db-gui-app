@@ -1,4 +1,4 @@
-	import {
+import {
   useState,
   useEffect,
   useRef,
@@ -17,9 +17,15 @@ import {
   Warehouse,
   Box,
   Smartphone,
+  LogOut,
 } from "lucide-react";
 
 import "./ProductDashboard.css";
+
+interface ProductDashboardProps {
+  userEmail: string;
+  onLogout: () => void;
+}
 
 const manufacturerNames: { [key: string]: string } = {
   A: "Bernhardt",
@@ -122,7 +128,7 @@ const manufacturerColumns: { [key: string]: { key: string; label: string }[] } =
 
 const PAGE_SIZE = 20;
 
-export default function ProductDashboard() {
+export default function ProductDashboard({ userEmail, onLogout }: ProductDashboardProps) {
   const [selectedManufacturer, setSelectedManufacturer] = useState<string>("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalCount, setTotalCount] = useState<number>(0);
@@ -386,7 +392,16 @@ export default function ProductDashboard() {
             <div className="icon-pulse"></div>
           </div>
           <div className="header-content">
-            <h1 className="header-title">Database Product Dashboard</h1>
+            <div className="header-top">
+              <h1 className="header-title">Database Product Dashboard</h1>
+              <div className="user-section">
+                <span className="user-email">{userEmail}</span>
+                <button onClick={onLogout} className="logout-button">
+                  <LogOut size={16} />
+                  Logout
+                </button>
+              </div>
+            </div>
             {isMobile && (
               <div className="mobile-badge">
                 <Smartphone size={14} />
